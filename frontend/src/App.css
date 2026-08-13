@@ -1,0 +1,53 @@
+/* Responsive App Container Wrapper */
+.app-container {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: #ffffff;
+  box-shadow: 0 0 50px rgba(27, 94, 32, 0.02);
+  position: relative;
+}
+
+/* Dynamic Grid layouts for side-by-side dashboard views on desktop */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+}
+
+@media (min-width: 768px) {
+  .dashboard-grid {
+    grid-template-columns: 1.8fr 1.2fr;
+  }
+}
+
+/* Form dual column structures */
+.form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+@media (min-width: 600px) {
+  .form-grid-2 {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Auto center logins & credentials forms on wide screens */
+.auth-wrapper {
+  max-width: 1000px;
+  width: 100%;
+  margin: 40px auto;
+  padding: 0 20px;
+}
+
+/* Header bar alignments */
+.header-container {
+  max-width: 1280px;
+  width: 100%;
+  margin: 0 auto;
+}
