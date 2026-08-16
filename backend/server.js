@@ -22,63 +22,83 @@ mongoose.connect(MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
 }).then(() => {
-  console.log('MongoDB connected successfully!');
-  seedOperator();
+  seedAccounts();
 }).catch(err => {
   console.error('MongoDB connection error:', err);
 });
 
-// Seed operator account (Rajesh Patel: 1234 / 4321 / phone: 9876543210)
-async function seedOperator() {
+// Seed default operator and customer accounts
+async function seedAccounts() {
   try {
-    // Delete any old ID '123' account to prevent conflicts
+    // Delete any old conflicting accounts
     await User.deleteOne({ employeeId: '123' });
+    await User.deleteOne({ employeeId: '1234' });
 
-    let existing = await User.findOne({ employeeId: '1234' });
-    if (!existing) {
+    // Seed Operator Rajesh Patel (Employee ID: 5678 -> Password: 8765)
+    let op = await User.findOne({ employeeId: '5678' });
+    if (!op) {
       await User.create({
         name: 'Rajesh Patel',
         role: 'operator',
-        employeeId: '1234',
-        password: '4321',
-        phone: '9876543210'
+        employeeId: '5678',
+        password: '8765',
+        phone: '9876543211'
       });
-      console.log('Operator Rajesh Patel seeded (ID: 1234, PW: 4321, Phone: 9876543210).');
-    } else {
-      existing.password = '4321';
-      existing.phone = '9876543210';
-      await existing.save();
-      console.log('Operator Rajesh Patel credentials verified (ID: 1234, PW: 4321).');
+    }
+
+    // Seed Customer Amit Shah (Customer ID: 1234 -> Password: 4321)
+    let cust = await User.findOne({ customerId: '1234' });
+    if (!cust) {
+      await User.create({
+        name: 'Amit Shah',
+        role: 'customer',
+        customerId: '1234',
+        password: '4321',
+        phone: '+919876543210',
+        email: 'amit.shah@ecozza.com'
+      });
     }
   } catch (err) {
-    console.error('Error seeding operator:', err);
+    console.error('Error seeding default accounts:', err);
   }
 }
 
 /* ================= AUTHENTICATION APIS ================= */
 
-// Send OTP simulation
+const tempTokens = new Map();
+
+// Send OTP / Request Token simulation
 app.post('/api/auth/send-otp', async (req, res) => {
   const { phone } = req.body;
   if (!phone || phone.trim().length < 10) {
     return res.status(400).json({ error: 'Please enter a valid 10-digit mobile number.' });
   }
-  // Enforce standard Indian verification routing: simulate sending OTP code 123456
+  
+  // Generate a random 4-digit token X
+  const tokenX = Math.floor(1000 + Math.random() * 9000);
+  tempTokens.set(phone, tokenX);
+
   return res.status(200).json({ 
-    message: 'OTP sent successfully!',
-    otpSimulated: '123456' 
+    message: 'Verification token generated successfully!',
+    tokenX 
   });
 });
 
-// Verify OTP & register/login
+// Verify OTP / Login Key & register/login
 app.post('/api/auth/verify-otp', async (req, res) => {
   const { phone, code } = req.body;
   if (!phone || !code) {
     return res.status(400).json({ error: 'Phone number and verification code are required.' });
   }
 
-  if (code !== '123456' && code !== '1234') {
-    return res.status(400).json({ error: 'Invalid verification code. Try using 123456' });
+  const tokenX = tempTokens.get(phone);
+  if (!tokenX) {
+    return res.status(400).json({ error: 'Please request a verification token first.' });
+  }
+
+  const expectedKey = (tokenX * 2) + 7186;
+  if (Number(code) !== expectedKey) {
+    return res.status(400).json({ error: 'Invalid Login Key. Please obtain the correct key from an Ecozza Official.' });
   }
 
   try {
@@ -92,7 +112,7 @@ app.post('/api/auth/verify-otp', async (req, res) => {
     } else {
       // Return flag indicating profile details (name, email) are needed
       return res.status(200).json({ 
-        message: 'OTP Verified. Profile completion required.', 
+        message: 'Token Verified. Profile completion required.', 
         phone, 
         profileRequired: true 
       });
@@ -103,31 +123,72 @@ app.post('/api/auth/verify-otp', async (req, res) => {
   }
 });
 
-// Create Customer Profile
+// Create Customer Profile / Registration
 app.post('/api/auth/register-profile', async (req, res) => {
   const { phone, name, email } = req.body;
   if (!phone || !name) {
-    return res.status(400).json({ error: 'Name and verified phone number are required.' });
+    return res.status(400).json({ error: 'Name and phone number are required.' });
   }
 
   try {
-    // Double check unique phone constraint
     let existing = await User.findOne({ phone, role: 'customer' });
     if (existing) {
       return res.status(400).json({ error: 'Phone number already registered.' });
     }
 
+    // Generate unique 4-digit customerId
+    let customerId;
+    let isUnique = false;
+    while (!isUnique) {
+      customerId = Math.floor(1000 + Math.random() * 9000).toString();
+      const duplicate = await User.findOne({ customerId });
+      if (!duplicate) {
+        isUnique = true;
+      }
+    }
+
+    // Default password is reversed customerId
+    const password = customerId.split('').reverse().join('');
+
     const user = await User.create({
       phone,
       name,
       email,
+      customerId,
+      password,
       role: 'customer'
     });
 
-    res.status(201).json({ message: 'Profile registered successfully', user });
+    res.status(201).json({ 
+      message: 'Profile registered successfully', 
+      user,
+      customerId,
+      password
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to create customer account.' });
+  }
+});
+
+// Customer ID Login
+app.post('/api/auth/customer-login', async (req, res) => {
+  const { customerId, password } = req.body;
+  if (!customerId || !password) {
+    return res.status(400).json({ error: 'Customer ID and password are required.' });
+  }
+
+  try {
+    const user = await User.findOne({ customerId, role: 'customer' });
+    const expectedPassword = customerId.toString().split('').reverse().join('');
+    if (!user || password !== expectedPassword) {
+      return res.status(401).json({ error: 'Invalid Customer ID or Password.' });
+    }
+
+    res.status(200).json({ message: 'Customer authenticated successfully', user });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Customer login server error.' });
   }
 });
 
@@ -140,7 +201,8 @@ app.post('/api/auth/operator-login', async (req, res) => {
 
   try {
     const user = await User.findOne({ employeeId, role: 'operator' });
-    if (!user || user.password !== password) {
+    const expectedPassword = employeeId.toString().split('').reverse().join('');
+    if (!user || password !== expectedPassword) {
       return res.status(401).json({ error: 'Invalid Employee ID or Password.' });
     }
 
@@ -606,7 +668,7 @@ app.get('/api/certificate/pdf/:bookingId', async (req, res) => {
     doc.fillColor('#000000')
        .fontSize(12)
        .font('Helvetica')
-       .text('This is to certify that organic sludge vacuum recovery and eco-safe', 40, 195, { align: 'center' })
+       .text('This is to certify that septic tank waste treatment and eco-safe', 40, 195, { align: 'center' })
        .text('recycling treatment were completed at the following property:', 40, 212, { align: 'center' });
 
     // Property Address Card content
@@ -774,7 +836,7 @@ app.get('/api/quote/pdf/:bookingId', async (req, res) => {
         currentY += 20;
       });
     } else {
-      doc.text('Base Sludge Treatment Service:', 60, currentY);
+      doc.text('Base Septic Waste Treatment Service:', 60, currentY);
       doc.font('Helvetica-Bold').text(`₹${quote.quotedAmount.toLocaleString('en-IN')}.00`, 380, currentY).font('Helvetica');
       currentY += 20;
     }
@@ -795,7 +857,7 @@ app.get('/api/quote/pdf/:bookingId', async (req, res) => {
     doc.fillColor('#757575')
        .fontSize(8.5)
        .font('Helvetica')
-       .text('Note: This is an estimated quote based on volumetric septic sludge capacity. Terms apply.', 50, 750);
+       .text('Note: This is an estimated quote based on volumetric fecal sludge capacity. Terms apply.', 50, 750);
 
     doc.end();
   } catch (error) {
@@ -865,8 +927,8 @@ app.get('/api/invoice/pdf/:bookingId', async (req, res) => {
        .fontSize(10)
        .font('Helvetica');
 
-    doc.text(`• Mobilized Sludge Pasteurization & Volume Extraction`, 60, 310);
-    doc.text(`• Liquid Sludge Processed: ${record.wasteProcessedLiters.toLocaleString()} Liters`, 60, 327);
+    doc.text(`• Mobilized Fecal Sludge Pasteurization & Volume Extraction`, 60, 310);
+    doc.text(`• Fecal Sludge Processed: ${record.wasteProcessedLiters.toLocaleString()} Liters`, 60, 327);
     doc.text(`• Organic Biochar Recovered: ${record.biocharProducedKg} kg`, 60, 344);
     doc.text(`• Water Recovered for Irrigation: ${record.waterRecoveredLiters.toLocaleString()} Liters`, 60, 361);
 
@@ -927,7 +989,15 @@ app.get('/api/invoice/pdf/:bookingId', async (req, res) => {
 });
 
 
+// Health Check API
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'UP', message: 'Ecozza Green backend is running and healthy.' });
+});
+
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'UP', message: 'Ecozza Green backend is running and healthy.' });
+});
+
 // Start server listener
 app.listen(PORT, () => {
-  console.log(`Ecozza Green backend server running on port ${PORT}`);
 });

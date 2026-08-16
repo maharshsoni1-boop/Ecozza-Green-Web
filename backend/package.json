@@ -1,7 +1,7 @@
 {
   "name": "ecozza-backend",
   "version": "1.0.0",
-  "description": "Ecozza Green - Zero-Waste Sludge Recovery Platform Backend",
+  "description": "Ecozza Green - Zero-Waste Septic Waste Treatment Platform Backend",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

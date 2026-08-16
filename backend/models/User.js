@@ -24,6 +24,11 @@ const UserSchema = new mongoose.Schema({
     unique: true,
     sparse: true
   },
+  customerId: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
   password: {
     type: String // Simple string password for demonstration prototype
   }

@@ -30,11 +30,11 @@ function App() {
   const [error, setError] = useState(null);
 
   // Verification & Temp States
-  const [loginPhone, setLoginPhone] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpCode, setOtpCode] = useState('');
+  const [loginCustId, setLoginCustId] = useState('');
+  const [loginCustPassword, setLoginCustPassword] = useState('');
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
+  const [regPhone, setRegPhone] = useState('');
 
   // Forms States
   const [propName, setPropName] = useState('');
@@ -145,54 +145,27 @@ function App() {
 
   /* ================= AUTHENTICATION ACTIONS ================= */
 
-  const handleSendOtp = async (phone) => {
-    const clean = phone.replace(/\D/g, '');
-    if (clean.length !== 10) {
-      showError('Please enter a valid 10-digit mobile number.');
+  const handleCustomerLogin = async (customerId, password) => {
+    if (!customerId || !password) {
+      showError('Please enter both your Customer ID and Password.');
       return;
     }
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/auth/send-otp`, {
+      const res = await fetch(`${API_BASE}/auth/customer-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: `+91${clean}` })
+        body: JSON.stringify({ customerId, password })
       });
       const data = await res.json();
       if (res.ok) {
-        setOtpSent(true);
-        setLoginPhone(`+91${clean}`);
-        alert(`Verification OTP sent: ${data.otpSimulated} (Use this code to verify)`);
+        setUser(data.user);
+        setView('CUSTOMER_HOME');
       } else {
         showError(data.error);
       }
     } catch (err) {
-      showError('Failed to send OTP message.');
-    }
-    setIsLoading(false);
-  };
-
-  const handleVerifyOtp = async () => {
-    setIsLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/auth/verify-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: loginPhone, code: otpCode })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        if (data.profileRequired) {
-          setView('PROFILE_SETUP');
-        } else {
-          setUser(data.user);
-          setView('CUSTOMER_HOME');
-        }
-      } else {
-        showError(data.error);
-      }
-    } catch (err) {
-      showError('OTP Verification failed.');
+      showError('Customer login failed.');
     }
     setIsLoading(false);
   };
@@ -202,17 +175,23 @@ function App() {
       showError('Please enter your full name.');
       return;
     }
+    if (!regPhone.trim()) {
+      showError('Please enter your mobile number.');
+      return;
+    }
     setIsLoading(true);
     try {
       const res = await fetch(`${API_BASE}/auth/register-profile`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: loginPhone, name: regName, email: regEmail })
+        body: JSON.stringify({ phone: regPhone, name: regName, email: regEmail })
       });
       const data = await res.json();
       if (res.ok) {
-        setUser(data.user);
-        setView('CUSTOMER_HOME');
+        alert(`Profile registered successfully!\n\nYour unique Customer ID is: ${data.customerId}\nYour password is: ${data.password}\n\nPlease write this down to log in.`);
+        setView('LOGIN');
+        setLoginCustId(data.customerId);
+        setLoginCustPassword('');
       } else {
         showError(data.error);
       }
@@ -656,7 +635,7 @@ function App() {
   };
 
   return (
-    <div className="app-container">
+    <div className={`app-container ${view === 'LANDING' ? 'landing-mode' : 'portal-mode'}`}>
       {view !== 'LOGIN' && view !== 'LANDING' && renderHeader()}
 
       {/* Main Container Views switcher */}
@@ -680,12 +659,13 @@ function App() {
         {view === 'LOGIN' && (
           <div className="auth-wrapper animate-fade-in">
             <LoginView 
-              onSendOtp={handleSendOtp}
-              onVerifyOtp={handleVerifyOtp}
+              onCustomerLogin={handleCustomerLogin}
               onOperatorLogin={handleOperatorLogin}
-              otpSent={otpSent}
-              otpCode={otpCode}
-              setOtpCode={setOtpCode}
+              loginCustId={loginCustId}
+              setLoginCustId={setLoginCustId}
+              loginCustPassword={loginCustPassword}
+              setLoginCustPassword={setLoginCustPassword}
+              onGoToRegister={() => setView('PROFILE_SETUP')}
               isLoading={isLoading}
               onBackToWebsite={() => setView('LANDING')}
             />
@@ -699,7 +679,10 @@ function App() {
               setRegName={setRegName}
               regEmail={regEmail}
               setRegEmail={setRegEmail}
+              regPhone={regPhone}
+              setRegPhone={setRegPhone}
               onRegister={handleRegisterProfile}
+              onGoToLogin={() => setView('LOGIN')}
               isLoading={isLoading}
             />
           </div>
@@ -848,423 +831,514 @@ function LandingPageView({ onAction }) {
       <div className="glow-ambient-left"></div>
 
       {/* Navigation Header */}
-      <nav className="landing-nav" style={{ padding: '8px 40px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }} onClick={() => handleScrollTo('hero')}>
-          <img src="/logo.png" alt="Ecozza Green Logo" style={{ height: '70px', objectFit: 'contain' }} />
-        </div>
-        <div className="landing-nav-links">
-          <a href="#about" onClick={(e) => { e.preventDefault(); handleScrollTo('about'); }} className="landing-nav-link">About Us</a>
-          <a href="#technology" onClick={(e) => { e.preventDefault(); handleScrollTo('technology'); }} className="landing-nav-link">Technology</a>
-          <a href="#products" onClick={(e) => { e.preventDefault(); handleScrollTo('products'); }} className="landing-nav-link">Products</a>
-          <a href="#founders" onClick={(e) => { e.preventDefault(); handleScrollTo('founders'); }} className="landing-nav-link">Founder</a>
-          <a href="#contact" onClick={(e) => { e.preventDefault(); handleScrollTo('contact'); }} className="landing-nav-link">Contact</a>
-          <button className="btn-primary" onClick={onAction} style={{ padding: '8px 16px', fontSize: '13px', marginLeft: '12px' }}>
-            Book Now
-          </button>
-          <button className="btn-secondary" onClick={onAction} style={{ padding: '8px 16px', fontSize: '13px' }}>
-            Login
-          </button>
-        </div>
-        
-        <div style={{ display: 'flex', gap: '8px' }} className="landing-nav-mobile-btn">
-          <button className="btn-primary" onClick={onAction} style={{ padding: '8px 12px', fontSize: '12px' }}>
-            Get Started
-          </button>
+      <nav className="landing-nav" style={{ padding: '16px 0', width: '100%' }}>
+        <div className="landing-container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }} onClick={() => handleScrollTo('hero')}>
+            <img src="/logo.png" alt="Ecozza Green Logo" style={{ height: '70px', objectFit: 'contain' }} />
+          </div>
+          <div className="landing-nav-links">
+            <a href="#about" onClick={(e) => { e.preventDefault(); handleScrollTo('about'); }} className="landing-nav-link">About Us</a>
+            <a href="#technology" onClick={(e) => { e.preventDefault(); handleScrollTo('technology'); }} className="landing-nav-link">Technology</a>
+            <a href="#products" onClick={(e) => { e.preventDefault(); handleScrollTo('products'); }} className="landing-nav-link">Products</a>
+            <a href="#founders" onClick={(e) => { e.preventDefault(); handleScrollTo('founders'); }} className="landing-nav-link">Founder</a>
+            <a href="#contact" onClick={(e) => { e.preventDefault(); handleScrollTo('contact'); }} className="landing-nav-link">Contact</a>
+          </div>
+          <div>
+            <button className="btn-primary" onClick={onAction} style={{ padding: '8px 20px', fontSize: '13px' }}>
+              Sign In
+            </button>
+          </div>
         </div>
       </nav>
 
       {/* Hero Section */}
-      <section id="hero" className="landing-section-wrapper" style={{ padding: '60px 20px' }}>
-        <div className="landing-grid-2">
-          {/* Left Hero Content */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'left' }}>
-            <div className="landing-badge" style={{ width: 'fit-content' }}>
-              🌱 Waste Into Resource
-            </div>
-            
-            <h1 style={{ fontSize: '42px', fontWeight: '900', color: 'var(--text-primary)', lineHeight: '1.15', letterSpacing: '-0.02em' }}>
-              Turning Septic Sludge Into <span style={{ color: 'var(--primary)', background: 'var(--gradient-brand)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Sustainable Value</span>
-            </h1>
-            
-            <p style={{ fontSize: '16px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-              Converting wet sewage sludge directly into high-value bioproducts with zero pre-drying technology inside a fully equipped mobile treatment factory. 
-            </p>
+      <section id="hero" className="landing-section-wrapper" style={{ padding: '60px 0' }}>
+        <div className="landing-container">
+          <div className="landing-grid-2">
+            {/* Left Hero Content */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'left' }}>
+              <div className="landing-badge" style={{ width: 'fit-content' }}>
+                🌱 Turning Waste Into Value
+              </div>
+              
+              <h1 style={{ fontSize: '42px', fontWeight: '900', color: 'var(--text-primary)', lineHeight: '1.15', letterSpacing: '-0.02em' }}>
+                Turning Septic Tank Waste Into <span style={{ color: 'var(--primary)', background: 'var(--gradient-brand)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Sustainable Value</span>
+              </h1>
+              
+              <p style={{ fontSize: '16px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                Converting wet septic tank waste directly into high-value bioproducts on-site with zero pre-drying mobile units.
+              </p>
 
-            <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', marginTop: '10px' }}>
-              <button className="btn-primary" onClick={onAction} style={{ padding: '14px 28px', fontSize: '15px' }}>
-                Book Inspection Visit <ChevronRight size={16} />
-              </button>
-              <button className="btn-secondary" onClick={onAction} style={{ padding: '14px 28px', fontSize: '15px' }}>
-                Sign In to Portal
-              </button>
+              <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', marginTop: '10px' }}>
+                <button className="btn-primary" onClick={onAction} style={{ padding: '14px 28px', fontSize: '15px' }}>
+                  Book Now
+                </button>
+                <button className="btn-secondary" onClick={onAction} style={{ padding: '14px 28px', fontSize: '15px' }}>
+                  Sign In to Portal
+                </button>
+              </div>
             </div>
-          </div>
 
-          {/* Right Hero Graphic */}
-          <div style={{ display: 'flex', justifyContent: 'center', position: 'relative' }}>
-            <div style={{
-              background: 'radial-gradient(circle, rgba(16,185,129,0.1) 0%, transparent 70%)',
-              padding: '24px',
-              borderRadius: 'var(--radius-lg)',
-              width: '100%',
-              maxWidth: '600px',
-              border: '1px solid rgba(255,255,255,0.4)',
-              boxShadow: 'var(--shadow-lg)'
-            }}>
-              <img 
-                src="/logo.png" 
-                alt="Ecozza Circular Infinity Loop" 
-                style={{
-                  width: '100%',
-                  height: 'auto',
-                  maxHeight: '420px',
-                  objectFit: 'contain',
-                  filter: 'drop-shadow(0 12px 25px rgba(4,120,87,0.15))'
-                }}
-              />
+            {/* Right Hero Graphic */}
+            <div style={{ display: 'flex', justifyContent: 'center', position: 'relative' }}>
+              <div style={{
+                background: 'radial-gradient(circle, rgba(16,185,129,0.1) 0%, transparent 70%)',
+                padding: '24px',
+                borderRadius: 'var(--radius-lg)',
+                width: '100%',
+                maxWidth: '600px',
+                border: '1px solid rgba(255,255,255,0.4)',
+                boxShadow: 'var(--shadow-lg)'
+              }}>
+                <img 
+                  src="/logo.png" 
+                  alt="Ecozza Circular Infinity Loop" 
+                  style={{
+                    width: '100%',
+                    height: 'auto',
+                    maxHeight: '420px',
+                    objectFit: 'contain',
+                    filter: 'drop-shadow(0 12px 25px rgba(4,120,87,0.15))'
+                  }}
+                />
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       {/* Stats bar */}
-      <section className="landing-stats-bar" style={{ marginTop: '0', marginBottom: '40px' }}>
-        <div className="landing-stat-item">
-          <h3>On-Site</h3>
-          <p>Treatment</p>
-        </div>
-        <div className="landing-stat-item">
-          <h3>Zero</h3>
-          <p>Landfill Dumping</p>
-        </div>
-        <div className="landing-stat-item">
-          <h3>Eco-Safe</h3>
-          <p>Bio-Conversion</p>
-        </div>
-        <div className="landing-stat-item">
-          <h3>Circular</h3>
-          <p>Resource Recovery</p>
-        </div>
-      </section>
+      <div className="landing-container">
+        <section className="landing-stats-bar" style={{ marginTop: '0', marginBottom: '40px', width: '100%', maxWidth: '100%' }}>
+          <div className="landing-stat-item">
+            <h3>On-Site</h3>
+            <p>Treatment</p>
+          </div>
+          <div className="landing-stat-item">
+            <h3>Zero</h3>
+            <p>Landfill Dumping</p>
+          </div>
+          <div className="landing-stat-item">
+            <h3>Eco-Safe</h3>
+            <p>Bio-Conversion</p>
+          </div>
+          <div className="landing-stat-item">
+            <h3>Circular</h3>
+            <p>Resource Recovery</p>
+          </div>
+        </section>
+      </div>
 
       {/* About Section */}
-      <section id="about" className="landing-section-wrapper" style={{ scrollMarginTop: '80px' }}>
-        <div className="landing-grid-2">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--primary)', letterSpacing: '1px', textTransform: 'uppercase' }}>About Ecozza Green</span>
-            <h2 style={{ fontSize: '32px', color: 'var(--primary-dark)', fontWeight: '900', lineHeight: '1.2' }}>
-              Solving the Septic Sludge Crisis, On-Site
-            </h2>
-            <p style={{ fontSize: '15px', color: 'var(--text-secondary)', lineHeight: '1.7' }}>
-              Ecozza Green is a mobile septic waste treatment company founded in 2026 and based in Ahmedabad, Gujarat, India. We do this by bringing a complete on-site treatment solution directly to every property that needs it.
-            </p>
-            <p style={{ fontSize: '15px', color: 'var(--text-secondary)', lineHeight: '1.7' }}>
-              Ecozza Green is not a waste disposal company. It is a circular economy company. Septic waste is our raw material, biochar and clean water are our products, and the mobile unit is our factory. Our tagline is: <strong>Turning Waste Into Value</strong>.
-            </p>
-          </div>
-
-          <div style={{
-            backgroundColor: '#ffffff',
-            padding: '32px',
-            borderRadius: 'var(--radius-lg)',
-            border: '1px solid var(--border)',
-            boxShadow: 'var(--shadow)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '16px'
-          }}>
-            <h4 style={{ fontWeight: '800', color: 'var(--primary-dark)', fontSize: '18px' }}>Our Core Identity</h4>
-            
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-              <span style={{ fontSize: '18px' }}>🚜</span>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                <strong>Mobile Factory:</strong> Zero transit cost or open dumping. All sludge is processed and reclaimed directly at your driveway.
+      <section id="about" className="landing-section-wrapper" style={{ scrollMarginTop: '80px', padding: '60px 0' }}>
+        <div className="landing-container">
+          <div className="landing-grid-2">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--primary)', letterSpacing: '1px', textTransform: 'uppercase' }}>About Ecozza Green</span>
+              <h2 style={{ fontSize: '32px', color: 'var(--primary-dark)', fontWeight: '900', lineHeight: '1.2' }}>
+                Solving the Septic Tank Waste Crisis, On-Site
+              </h2>
+              <p style={{ fontSize: '15px', color: 'var(--text-secondary)', lineHeight: '1.7' }}>
+                Ecozza Green is a circular economy company founded in 2026 and based in Ahmedabad. We treat septic tank waste and fecal sludge directly on-site using Mobile Treatment Units during our 2026 Gujarat pilot phase, with national expansion planned later.
               </p>
-            </div>
-            
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-              <span style={{ fontSize: '18px' }}>🌱</span>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                <strong>Biochar Soil Enhancement:</strong> Captures organic carbon and traps it inside soil structures for horticultural nourishment.
+              <p style={{ fontSize: '15px', color: 'var(--text-secondary)', lineHeight: '1.7' }}>
+                We are not a waste disposal company. Septic tank waste is our raw material, while organic biochar and clean recycled irrigation water are our final products.
               </p>
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-              <span style={{ fontSize: '18px' }}>💧</span>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                <strong>Recycled Water:</strong> Converts septic liquid into filtered, non-potable water returned to you for landscaping irrigation.
-              </p>
+            <div style={{
+              backgroundColor: '#ffffff',
+              padding: '32px',
+              borderRadius: 'var(--radius-lg)',
+              border: '1px solid var(--border)',
+              boxShadow: 'var(--shadow)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px'
+            }}>
+              <h4 style={{ fontWeight: '800', color: 'var(--primary-dark)', fontSize: '18px' }}>Our Core Identity</h4>
+              
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                <span style={{ fontSize: '18px', flexShrink: 0 }}>🚜</span>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  <strong>Mobile Factory:</strong> Zero transit cost or open dumping. All septic tank waste is processed and reclaimed directly at your driveway.
+                </p>
+              </div>
+              
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                <span style={{ fontSize: '18px', flexShrink: 0 }}>🌱</span>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  <strong>Biochar Soil Enhancement:</strong> Captures organic carbon and traps it inside soil structures for horticultural nourishment.
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                <span style={{ fontSize: '18px', flexShrink: 0 }}>💧</span>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  <strong>Recycled Water:</strong> Converts septic liquid into filtered, non-potable water returned to you for landscaping irrigation.
+                </p>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       {/* Technology Section */}
-      <section id="technology" className="landing-section-wrapper" style={{ borderTop: '1px solid var(--border)', scrollMarginTop: '80px' }}>
-        <div style={{ textAlign: 'center', marginBottom: '48px' }}>
-          <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--primary)', letterSpacing: '1px', textTransform: 'uppercase' }}>Closed-Loop Process</span>
-          <h2 style={{ fontSize: '32px', marginTop: '8px', color: 'var(--primary-dark)', fontWeight: '900' }}>How Our Mobile Technology Works</h2>
-          <p style={{ fontSize: '15px', color: 'var(--text-secondary)', marginTop: '8px', maxWidth: '600px', margin: '8px auto 0' }}>
-            Operating directly in the liquid phase without massive solar drying beds or carbon-heavy incinerators.
-          </p>
-        </div>
+      <section id="technology" className="landing-section-wrapper" style={{ borderTop: '1px solid var(--border)', scrollMarginTop: '80px', padding: '60px 0' }}>
+        <div className="landing-container">
+          <div style={{ textAlign: 'center', marginBottom: '48px' }}>
+            <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--primary)', letterSpacing: '1px', textTransform: 'uppercase' }}>Closed-Loop Process</span>
+            <h2 style={{ fontSize: '32px', marginTop: '8px', color: 'var(--primary-dark)', fontWeight: '900' }}>How Our Mobile Technology Works</h2>
+            <p style={{ fontSize: '15px', color: 'var(--text-secondary)', marginTop: '8px', maxWidth: '600px', margin: '8px auto 0' }}>
+              Operating directly in the liquid phase without massive solar drying beds or carbon-heavy incinerators.
+            </p>
+          </div>
 
-        <div className="grid-responsive-3">
-          <div className="flow-step-card">
-            <div className="flow-step-number">1</div>
-            <div>
-              <h4 style={{ fontWeight: '800', fontSize: '15px', color: 'var(--text-primary)' }}>Raw Sewage Intake</h4>
-              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                Sludge is vacuum-pumped directly from your septic tank manhole into the vehicle. Bypasses drying beds.
-              </p>
+          <div className="grid-responsive-3">
+            <div className="flow-step-card">
+              <div className="flow-step-number">1</div>
+              <div>
+                <h4 style={{ fontWeight: '800', fontSize: '15px', color: 'var(--text-primary)' }}>Raw Fecal Sludge Intake</h4>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                  Fecal sludge is vacuum-pumped directly from your septic tank manhole into the Mobile Treatment Unit, bypassing open drying beds.
+                </p>
+              </div>
+            </div>
+
+            <div className="flow-step-card">
+              <div className="flow-step-number">2</div>
+              <div>
+                <h4 style={{ fontWeight: '800', fontSize: '15px', color: 'var(--text-primary)' }}>Thermal Pasteurization</h4>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                  Thermal pasteurization and recovery inside the mobile factory sanitizes the waste and separates organic matter.
+                </p>
+              </div>
+            </div>
+
+            <div className="flow-step-card">
+              <div className="flow-step-number">3</div>
+              <div>
+                <h4 style={{ fontWeight: '800', fontSize: '15px', color: 'var(--text-primary)' }}>Recycled Outputs</h4>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                  Produces organic biochar soil amendments and filtered garden irrigation water before leaving your premises.
+                </p>
+              </div>
             </div>
           </div>
 
-          <div className="flow-step-card">
-            <div className="flow-step-number">2</div>
-            <div>
-              <h4 style={{ fontWeight: '800', fontSize: '15px', color: 'var(--text-primary)' }}>Thermal Pasteurization</h4>
-              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                Thermal pasteurization and recovery inside the mobile factory sanitizes the waste and separates organic matter.
+          {/* Digital Platform Operations Section */}
+          <div style={{ marginTop: '56px', borderTop: '1px dashed var(--border)', paddingTop: '48px' }}>
+            <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+              <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--primary)', letterSpacing: '1px', textTransform: 'uppercase' }}>Digital Management</span>
+              <h3 style={{ fontSize: '26px', marginTop: '8px', color: 'var(--primary-dark)', fontWeight: '900' }}>End-to-End Online Platform</h3>
+              <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginTop: '6px', maxWidth: '600px', margin: '6px auto 0' }}>
+                Ecozza Green's service delivery is technology-enabled and digitally managed from the initial assessment through to compliance certification.
               </p>
             </div>
-          </div>
 
-          <div className="flow-step-card">
-            <div className="flow-step-number">3</div>
-            <div>
-              <h4 style={{ fontWeight: '800', fontSize: '15px', color: 'var(--text-primary)' }}>Recycled Outputs</h4>
-              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                Produces organic biochar soil amendments and filtered garden irrigation water before leaving your premises.
-              </p>
+            <div className="grid-responsive-2">
+              <div className="card" style={{ backgroundColor: '#ffffff', padding: '24px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <h4 style={{ fontWeight: '800', fontSize: '15px', color: 'var(--text-primary)' }}>Online Request & Booking</h4>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                  Request site assessments and bookings online in minutes without scheduling calls.
+                </p>
+              </div>
+
+              <div className="card" style={{ backgroundColor: '#ffffff', padding: '24px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <h4 style={{ fontWeight: '800', fontSize: '15px', color: 'var(--text-primary)' }}>Digital Quotes & Scheduling</h4>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                  Confirm quotes and schedule visits digitally after our initial site audit.
+                </p>
+              </div>
+
+              <div className="card" style={{ backgroundColor: '#ffffff', padding: '24px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <h4 style={{ fontWeight: '800', fontSize: '15px', color: 'var(--text-primary)' }}>Service Completion Certificates</h4>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                  Access certificates instantly online for regulatory compliance and ESG records.
+                </p>
+              </div>
+
+              <div className="card" style={{ backgroundColor: '#ffffff', padding: '24px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <h4 style={{ fontWeight: '800', fontSize: '15px', color: 'var(--text-primary)' }}>Subscription Contract Management</h4>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                  Manage recurring contract schedules directly through your custom portal.
+                </p>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       {/* Products Section */}
-      <section id="products" className="landing-section-wrapper" style={{ borderTop: '1px solid var(--border)', scrollMarginTop: '80px' }}>
-        <div style={{ textAlign: 'center', marginBottom: '48px' }}>
-          <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--primary)', letterSpacing: '1px', textTransform: 'uppercase' }}>Value Outputs</span>
-          <h2 style={{ fontSize: '32px', marginTop: '8px', color: 'var(--primary-dark)', fontWeight: '900' }}>Our Clean-Tech Products</h2>
-        </div>
-
-        <div className="grid-responsive-2">
-          {/* Product 1: Biochar */}
-          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '12px', backgroundColor: '#ffffff' }}>
-            <span style={{ fontSize: '32px' }}>🌱</span>
-            <h3 style={{ fontSize: '20px', fontWeight: '800', color: 'var(--primary-dark)' }}>Biochar / Soil Enhancer</h3>
-            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-              A stable, carbon-rich soil conditioner designed to restore microbial health and water retention in depleted agricultural or garden lands.
-            </p>
-            
-            <div className="product-metric-grid">
-              <div className="product-metric-item">
-                <span>Carbon Content</span>
-                <strong>High Organic C</strong>
-              </div>
-              <div className="product-metric-item">
-                <span>Water Retention</span>
-                <strong>2x Improvement</strong>
-              </div>
-            </div>
-
-            <ul style={{ listStyleType: 'none', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px', color: 'var(--text-secondary)', marginTop: '10px' }}>
-              <li>✅ Sequesters carbon safely in soil systems for hundreds of years.</li>
-              <li>✅ Buffers pH levels and prevents artificial fertilizer chemical runoff.</li>
-              <li>✅ Fosters deep microbial growth for lawn, trees, and ornamental crops.</li>
-            </ul>
+      <section id="products" className="landing-section-wrapper" style={{ borderTop: '1px solid var(--border)', scrollMarginTop: '80px', padding: '60px 0' }}>
+        <div className="landing-container">
+          <div style={{ textAlign: 'center', marginBottom: '48px' }}>
+            <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--primary)', letterSpacing: '1px', textTransform: 'uppercase' }}>Value Outputs</span>
+            <h2 style={{ fontSize: '32px', marginTop: '8px', color: 'var(--primary-dark)', fontWeight: '900' }}>Our Clean-Tech Products</h2>
           </div>
 
-          {/* Product 2: Treated Water */}
-          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '12px', backgroundColor: '#ffffff' }}>
-            <span style={{ fontSize: '32px' }}>💧</span>
-            <h3 style={{ fontSize: '20px', fontWeight: '800', color: 'var(--primary-dark)' }}>Treated Irrigation Water</h3>
-            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-              Filter-processed, pathogen-free water returned directly to the customer site, preventing municipal sewage discharge.
-            </p>
+          <div className="grid-responsive-2">
+            {/* Product 1: Biochar */}
+            <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '12px', backgroundColor: '#ffffff' }}>
+              <h3 style={{ fontSize: '20px', fontWeight: '800', color: 'var(--primary-dark)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>🌱</span> Biochar / Soil Enhancer
+              </h3>
+              <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                A stable, carbon-rich soil conditioner designed to restore microbial health and water retention in depleted agricultural or garden lands.
+              </p>
+              
+              <div className="product-metric-grid">
+                <div className="product-metric-item">
+                  <span>Carbon Content</span>
+                  <strong>High Organic C</strong>
+                </div>
+                <div className="product-metric-item">
+                  <span>Water Retention</span>
+                  <strong>2x Improvement</strong>
+                </div>
+              </div>
 
-            <div className="product-metric-grid">
-              <div className="product-metric-item">
-                <span>Pathogen Level</span>
-                <strong>0% (Neutralized)</strong>
-              </div>
-              <div className="product-metric-item">
-                <span>Usage Fitness</span>
-                <strong>Non-Potable / Garden</strong>
-              </div>
+              <ul style={{ listStyleType: 'none', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px', color: 'var(--text-secondary)', marginTop: '10px' }}>
+                <li>✅ Sequesters carbon safely in soil systems for hundreds of years.</li>
+                <li>✅ Buffers pH levels and prevents artificial fertilizer chemical runoff.</li>
+                <li>✅ Fosters deep microbial growth for lawn, trees, and ornamental crops.</li>
+              </ul>
             </div>
 
-            <ul style={{ listStyleType: 'none', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px', color: 'var(--text-secondary)', marginTop: '10px' }}>
-              <li>✅ Conserves local drinking groundwater resources.</li>
-              <li>✅ Eliminates cost of purchasing tankers for plant irrigation.</li>
-              <li>✅ Odor-free fluid fully compliant with regional environmental parameters.</li>
-            </ul>
+            {/* Product 2: Treated Water */}
+            <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '12px', backgroundColor: '#ffffff' }}>
+              <h3 style={{ fontSize: '20px', fontWeight: '800', color: 'var(--primary-dark)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>💧</span> Treated Irrigation Water
+              </h3>
+              <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                Filter-processed, pathogen-free water returned directly to the customer site, preventing municipal waste discharge.
+              </p>
+
+              <div className="product-metric-grid">
+                <div className="product-metric-item">
+                  <span>Pathogen Level</span>
+                  <strong>0% (Neutralized)</strong>
+                </div>
+                <div className="product-metric-item">
+                  <span>Usage Fitness</span>
+                  <strong>Non-Potable / Garden</strong>
+                </div>
+              </div>
+
+              <ul style={{ listStyleType: 'none', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px', color: 'var(--text-secondary)', marginTop: '10px' }}>
+                <li>✅ Conserves local drinking groundwater resources.</li>
+                <li>✅ Eliminates cost of purchasing tankers for plant irrigation.</li>
+                <li>✅ Odor-free fluid fully compliant with regional environmental parameters.</li>
+              </ul>
+            </div>
           </div>
         </div>
       </section>
 
       {/* Founder Section */}
-      <section id="founders" className="landing-section-wrapper" style={{ borderTop: '1px solid var(--border)', scrollMarginTop: '80px' }}>
-        <div style={{ textAlign: 'center', marginBottom: '48px' }}>
-          <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--primary)', letterSpacing: '1px', textTransform: 'uppercase' }}>Governance</span>
-          <h2 style={{ fontSize: '32px', marginTop: '8px', color: 'var(--primary-dark)', fontWeight: '900' }}>Company Founders</h2>
-          <p style={{ fontSize: '15px', color: 'var(--text-secondary)', marginTop: '6px' }}>
-            Ecozza Green Tech Solutions Private Limited
-          </p>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
-          {/* Maharsh Soni (Founder) */}
-          <div className="founder-bio-card" style={{ borderLeft: '6px solid var(--primary)' }}>
-            <span className="founder-title-badge" style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary)' }}>Founder</span>
-            <h3 style={{ fontSize: '22px', fontWeight: '800', color: 'var(--text-primary)', marginTop: '6px' }}>Maharsh Soni</h3>
-            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.6', marginTop: '8px' }}>
-              Founder of Ecozza Green. Handles both the front-end operations management and back-end clean engineering design processes, leading the circular waste-to-value system.
+      <section id="founders" className="landing-section-wrapper" style={{ borderTop: '1px solid var(--border)', scrollMarginTop: '80px', padding: '60px 0' }}>
+        <div className="landing-container">
+          <div style={{ textAlign: 'center', marginBottom: '48px' }}>
+            <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--primary)', letterSpacing: '1px', textTransform: 'uppercase' }}>Governance</span>
+            <h2 style={{ fontSize: '32px', marginTop: '8px', color: 'var(--primary-dark)', fontWeight: '900' }}>Company Founders</h2>
+            <p style={{ fontSize: '15px', color: 'var(--text-secondary)', marginTop: '6px' }}>
+              Ecozza Green Tech Solutions Private Limited
             </p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
-            {/* Dr. Devanshi Soni (Co-Founder) */}
-            <div className="founder-bio-card">
-              <span className="founder-title-badge">Co-Founder</span>
-              <h3 style={{ fontSize: '18px', fontWeight: '800', color: 'var(--text-primary)', marginTop: '6px' }}>Dr. Devanshi Soni</h3>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6', marginTop: '8px' }}>
-                Co-inventor and co-founder. Driving business deployment, operational integration, and municipal partnerships across Gujarat.
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
+            {/* Maharsh Soni (Founder) */}
+            <div className="founder-bio-card" style={{ borderLeft: '6px solid var(--primary)' }}>
+              <span className="founder-title-badge" style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary)' }}>Founder</span>
+              <h3 style={{ fontSize: '22px', fontWeight: '800', color: 'var(--text-primary)', marginTop: '6px' }}>Maharsh Soni</h3>
+              <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.6', marginTop: '8px' }}>
+                Founder of Ecozza Green. Handles both the front-end operations management and back-end clean engineering design processes, leading the circular waste-to-value system.
               </p>
             </div>
 
-            {/* Anchal Shah (Co-Founder) */}
-            <div className="founder-bio-card">
-              <span className="founder-title-badge">Co-Founder</span>
-              <h3 style={{ fontSize: '18px', fontWeight: '800', color: 'var(--text-primary)', marginTop: '6px' }}>Anchal Shah</h3>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6', marginTop: '8px' }}>
-                Co-founder specializing in green clean-tech process design and thermal pasteurization reactor engineering.
-              </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
+              {/* Dr. Devanshi Soni (Co-Founder) */}
+              <div className="founder-bio-card">
+                <span className="founder-title-badge">Co-Founder</span>
+                <h3 style={{ fontSize: '18px', fontWeight: '800', color: 'var(--text-primary)', marginTop: '6px' }}>Dr. Devanshi Soni</h3>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6', marginTop: '8px' }}>
+                  Co-inventor and co-founder. Driving business deployment, operational integration, and municipal partnerships across Gujarat.
+                </p>
+              </div>
+
+              {/* Anchal Shah (Co-Founder) */}
+              <div className="founder-bio-card">
+                <span className="founder-title-badge">Co-Founder</span>
+                <h3 style={{ fontSize: '18px', fontWeight: '800', color: 'var(--text-primary)', marginTop: '6px' }}>Anchal Shah</h3>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6', marginTop: '8px' }}>
+                  Co-founder specializing in green clean-tech process design and thermal pasteurization reactor engineering.
+                </p>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       {/* Contact Section */}
-      <section id="contact" className="landing-section-wrapper" style={{ borderTop: '1px solid var(--border)', scrollMarginTop: '80px', marginBottom: '40px' }}>
-        <div className="landing-grid-2">
-          {/* Contact Info */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--primary)', letterSpacing: '1px', textTransform: 'uppercase' }}>Get In Touch</span>
-            <h2 style={{ fontSize: '32px', color: 'var(--primary-dark)', fontWeight: '900', lineHeight: '1.2' }}>
-              Let's Build a Greener Economy Together
-            </h2>
-            <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
-              Questions about scheduling desludging services, buying biochar soil conditioners, or partnering with our engineering team? Contact us.
-            </p>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
-              <div>
-                <h5 style={{ fontWeight: '800', color: 'var(--text-primary)', fontSize: '14px' }}>Call Us</h5>
-                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                  📞 <a href="tel:7778028946" style={{ color: 'var(--primary)', textDecoration: 'none', fontWeight: '700' }}>+91 77780 28946</a>
-                </p>
-              </div>
+      <section id="contact" className="landing-section-wrapper" style={{ borderTop: '1px solid var(--border)', scrollMarginTop: '80px', marginBottom: '40px', padding: '60px 0' }}>
+        <div className="landing-container">
+          <div className="landing-grid-2">
+            {/* Contact Info */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--primary)', letterSpacing: '1px', textTransform: 'uppercase' }}>Get In Touch</span>
+              <h2 style={{ fontSize: '32px', color: 'var(--primary-dark)', fontWeight: '900', lineHeight: '1.2' }}>
+                Let's Build a Greener Economy Together
+              </h2>
+              <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
+                Questions about scheduling septic tank waste treatment services, buying biochar soil conditioners, or partnering with our engineering team? Contact us.
+              </p>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
+                <div>
+                  <h5 style={{ fontWeight: '800', color: 'var(--text-primary)', fontSize: '14px' }}>Call Us</h5>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                    📞 <a href="tel:7778028946" style={{ color: 'var(--primary)', textDecoration: 'none', fontWeight: '700' }}>+91 77780 28946</a>
+                  </p>
+                </div>
 
-              <div>
-                <h5 style={{ fontWeight: '800', color: 'var(--text-primary)', fontSize: '14px' }}>Email Us</h5>
-                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                  ✉️ <a href="mailto:ecozzagreen@gmail.com" style={{ color: 'var(--primary)', textDecoration: 'none', fontWeight: '700' }}>ecozzagreen@gmail.com</a>
-                </p>
-              </div>
+                <div>
+                  <h5 style={{ fontWeight: '800', color: 'var(--text-primary)', fontSize: '14px' }}>Email Us</h5>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                    ✉️ <a href="mailto:ecozzagreen@gmail.com" style={{ color: 'var(--primary)', textDecoration: 'none', fontWeight: '700' }}>ecozzagreen@gmail.com</a>
+                  </p>
+                </div>
 
-              <div>
-                <h5 style={{ fontWeight: '800', color: 'var(--text-primary)', fontSize: '14px' }}>Our Locations</h5>
-                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                  📍 <strong>Headquarters:</strong> Ahmedabad, Gujarat, India<br/>
-                  📍 <strong>Operations:</strong> Halol Industrial Corridor, Panchmahal, Gujarat
-                </p>
+                <div>
+                  <h5 style={{ fontWeight: '800', color: 'var(--text-primary)', fontSize: '14px' }}>Our Locations</h5>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                    📍 <strong>Headquarters:</strong> Ahmedabad, Gujarat, India<br/>
+                    📍 <strong>Operations:</strong> Halol Industrial Corridor, Panchmahal, Gujarat
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Quick Contact Form Card */}
-          <div className="card" style={{ backgroundColor: '#ffffff', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <h4 style={{ fontWeight: '800', fontSize: '18px', color: 'var(--primary-dark)' }}>Submit an Inquiry</h4>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div>
-                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Full Name</label>
-                <input type="text" placeholder="John Doe" />
+            {/* Quick Contact Form Card */}
+            <div className="card" style={{ backgroundColor: '#ffffff', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <h4 style={{ fontWeight: '800', fontSize: '18px', color: 'var(--primary-dark)' }}>Submit an Inquiry</h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Full Name</label>
+                  <input type="text" placeholder="John Doe" />
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Email Address</label>
+                  <input type="email" placeholder="john@company.com" />
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Message</label>
+                  <textarea placeholder="How can Ecozza Green assist you?" rows={2} />
+                </div>
+                <button 
+                  type="button" 
+                  className="btn-primary" 
+                  onClick={() => alert('Thank you! Your inquiry was received. We will respond within 24 hours.')}
+                  style={{ width: '100%', marginTop: '6px' }}
+                >
+                  Send Message
+                </button>
               </div>
-              <div>
-                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Email Address</label>
-                <input type="email" placeholder="john@company.com" />
-              </div>
-              <div>
-                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Message</label>
-                <textarea placeholder="How can Ecozza Green assist you?" rows={2} />
-              </div>
-              <button 
-                type="button" 
-                className="btn-primary" 
-                onClick={() => alert('Thank you! Your inquiry was received. We will respond within 24 hours.')}
-                style={{ width: '100%', marginTop: '6px' }}
-              >
-                Send Message
-              </button>
             </div>
           </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="landing-footer">
-        <div className="landing-footer-logo">
-          <div style={{
-            width: '28px', height: '28px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.2)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff',
-            fontWeight: 'bold', fontSize: '16px'
-          }}>♻</div>
-          <span>ECOZZA GREEN</span>
-        </div>
-        <p style={{ fontSize: '13px', color: '#a7f3d0' }}>Turning Waste Into Value</p>
-        
-        {/* LinkedIn Link */}
-        <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'center' }}>
-          <a 
-            href="https://www.linkedin.com/company/ecozzagreen/" 
-            target="_blank" 
-            rel="noreferrer" 
-            style={{ 
-              color: '#ffffff', 
-              display: 'inline-flex', 
-              alignItems: 'center', 
-              gap: '6px', 
-              fontSize: '13px', 
-              textDecoration: 'none',
-              backgroundColor: 'rgba(255,255,255,0.1)',
-              padding: '6px 14px',
-              borderRadius: '20px',
-              transition: 'background 0.3s'
-            }}
-            onMouseOver={e => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)'}
-            onMouseOut={e => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)'}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '4px' }}><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect width="4" height="12" x="2" y="9"/><circle cx="4" cy="4" r="2"/></svg> Follow us on LinkedIn
-          </a>
-        </div>
+      <footer className="landing-footer" style={{ padding: '48px 0' }}>
+        <div className="landing-container">
+          <div className="landing-footer-grid">
+            {/* Column 1 */}
+            <div className="landing-footer-col">
+              <div className="landing-footer-heading" style={{ fontSize: '18px', fontWeight: '900', color: '#ffffff' }}>
+                Ecozza Green
+              </div>
+              <p style={{ fontSize: '13px', color: '#a7f3d0', fontWeight: '600' }}>
+                Turning Waste Into Value.
+              </p>
+              <p style={{ fontSize: '12px', color: '#6ee7b7', lineHeight: '1.5' }}>
+                Ecozza Green is a circular economy company founded in 2026, based in Ahmedabad, Gujarat, India. We process septic tank waste and fecal sludge directly on-site using our Mobile Treatment Units.
+              </p>
+              <div style={{ marginTop: '8px' }}>
+                <a 
+                  href="https://www.linkedin.com/company/ecozzagreen/" 
+                  target="_blank" 
+                  rel="noreferrer" 
+                  style={{ 
+                    color: '#ffffff', 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    gap: '6px', 
+                    fontSize: '12px', 
+                    textDecoration: 'none',
+                    backgroundColor: 'rgba(255,255,255,0.1)',
+                    padding: '6px 14px',
+                    borderRadius: '20px',
+                    transition: 'background 0.3s'
+                  }}
+                  onMouseOver={e => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)'}
+                  onMouseOut={e => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)'}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '4px' }}><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect width="4" height="12" x="2" y="9"/><circle cx="4" cy="4" r="2"/></svg> LinkedIn
+                </a>
+              </div>
+            </div>
 
-        <p style={{ marginTop: '24px', fontSize: '11px', color: '#6ee7b7', opacity: 0.8 }}>
-          © 2026 Ecozza Green Tech Solutions Pvt. Ltd. | Ahmedabad, Gujarat, India | Confidential
-        </p>
+            {/* Column 2 */}
+            <div className="landing-footer-col">
+              <div className="landing-footer-heading">Company</div>
+              <div className="landing-footer-links">
+                <button onClick={() => handleScrollTo('about')} className="landing-footer-link">About Us</button>
+                <button onClick={() => handleScrollTo('technology')} className="landing-footer-link">How It Works</button>
+                <button onClick={() => handleScrollTo('contact')} className="landing-footer-link">Contact</button>
+              </div>
+            </div>
+
+            {/* Column 3 */}
+            <div className="landing-footer-col">
+              <div className="landing-footer-heading">Services</div>
+              <div className="landing-footer-links" style={{ color: '#a7f3d0', fontSize: '13px', lineHeight: '1.6' }}>
+                <div>Residential</div>
+                <div>Housing Societies</div>
+                <div>Commercial Properties</div>
+                <div>Institutions & Industries</div>
+              </div>
+            </div>
+
+            {/* Column 4 */}
+            <div className="landing-footer-col">
+              <div className="landing-footer-heading">Contact & Legal</div>
+              <div className="landing-footer-links" style={{ color: '#a7f3d0', fontSize: '13px', lineHeight: '1.6' }}>
+                <div>Location: Ahmedabad, Gujarat, India</div>
+                <div>Email: ecozzagreen@gmail.com</div>
+                <div>Phone: +91 77780 28946</div>
+                <div style={{ marginTop: '8px', color: 'rgba(255,255,255,0.4)', fontSize: '12px' }}>Privacy Policy</div>
+                <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px' }}>Terms of Service</div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '24px', marginTop: '24px' }}>
+            <p style={{ fontSize: '11px', color: '#6ee7b7', opacity: 0.8 }}>
+              © 2026 Ecozza Green. All rights reserved.
+            </p>
+          </div>
+        </div>
       </footer>
     </div>
   );
 }
 
 function LoginView({ 
-  onSendOtp, onVerifyOtp, onOperatorLogin, 
-  otpSent, otpCode, setOtpCode, isLoading,
-  onBackToWebsite
+  onCustomerLogin, onOperatorLogin, 
+  loginCustId, setLoginCustId, loginCustPassword, setLoginCustPassword,
+  onGoToRegister, isLoading, onBackToWebsite
 }) {
   const [isOfficial, setIsOfficial] = useState(false);
-  const [phone, setPhone] = useState('');
   const [empId, setEmpId] = useState('');
   const [password, setPassword] = useState('');
 
@@ -1278,7 +1352,7 @@ function LoginView({
 
         <div style={{ margin: '40px 0' }}>
           <h1 style={{ color: '#ffffff', fontSize: '32px', fontWeight: '800', marginBottom: '16px', lineHeight: '1.2' }}>
-            Zero-Waste Sludge Recovery & Organic Bio-Recycling
+            Zero-Waste Septic Tank Waste Treatment & Bio-Recycling
           </h1>
           <p style={{ color: '#a7f3d0', fontSize: '15px', marginBottom: '28px', fontWeight: '500' }}>
             A circular economy platform converting domestic, commercial, and industrial septic waste into eco-safe recycled biochar and clean agricultural water.
@@ -1286,23 +1360,20 @@ function LoginView({
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
             <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-              <span style={{ fontSize: '20px' }}>🌱</span>
               <div>
-                <h4 style={{ color: '#ffffff', fontSize: '14px', fontWeight: '700' }}>100% Circular De-Sludging</h4>
+                <h4 style={{ color: '#ffffff', fontSize: '14px', fontWeight: '700' }}>🌱 100% Circular Treatment</h4>
                 <p style={{ color: '#d1fae5', fontSize: '12px' }}>Domestic and industrial recovery turning organic waste into compost.</p>
               </div>
             </div>
             <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-              <span style={{ fontSize: '20px' }}>⚡</span>
               <div>
-                <h4 style={{ color: '#ffffff', fontSize: '14px', fontWeight: '700' }}>Auto-Calculated Audits</h4>
+                <h4 style={{ color: '#ffffff', fontSize: '14px', fontWeight: '700' }}>⚡ Auto-Calculated Audits</h4>
                 <p style={{ color: '#d1fae5', fontSize: '12px' }}>Visiting officials map dimensions and auto-calculate volume via laser math.</p>
               </div>
             </div>
             <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-              <span style={{ fontSize: '20px' }}>🛡️</span>
               <div>
-                <h4 style={{ color: '#ffffff', fontSize: '14px', fontWeight: '700' }}>Completion Letter</h4>
+                <h4 style={{ color: '#ffffff', fontSize: '14px', fontWeight: '700' }}>📄 Completion Letter</h4>
                 <p style={{ color: '#d1fae5', fontSize: '12px' }}>Download your official service completion letter instantly.</p>
               </div>
             </div>
@@ -1338,48 +1409,42 @@ function LoginView({
         </div>
 
         {!isOfficial ? (
-          // Customer login Phone/OTP form
-          <div>
-            {!otpSent ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)', display: 'block', marginBottom: '8px' }}>Mobile Number</label>
-                  <div style={{ position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', fontSize: '15px', fontWeight: '600' }}>+91</span>
-                    <input 
-                      type="tel" 
-                      placeholder="9876543210" 
-                      value={phone} 
-                      onChange={e => setPhone(e.target.value)} 
-                      style={{ paddingLeft: '52px' }}
-                    />
-                  </div>
-                </div>
+          // Customer login ID/Password form
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ padding: '12px 14px', backgroundColor: 'var(--primary-light)', border: '1px solid var(--primary-accent)', borderRadius: '10px', fontSize: '12px', color: 'var(--primary-dark)' }}>
+              Enter your Customer ID and password. Default password is the reverse of your Customer ID.
+            </div>
+            <div>
+              <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)', display: 'block', marginBottom: '8px' }}>Customer ID</label>
+              <input 
+                type="text" 
+                placeholder="e.g. 1234" 
+                value={loginCustId} 
+                onChange={e => setLoginCustId(e.target.value)} 
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)', display: 'block', marginBottom: '8px' }}>Password</label>
+              <input 
+                type="password" 
+                placeholder="••••••••" 
+                value={loginCustPassword} 
+                onChange={e => setLoginCustPassword(e.target.value)} 
+              />
+            </div>
 
-                <button className="btn-primary" onClick={() => onSendOtp(phone)} disabled={isLoading}>
-                  <Phone size={18} /> Send OTP Verification
-                </button>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div style={{ padding: '12px 14px', backgroundColor: 'var(--primary-light)', border: '1px solid var(--primary-accent)', borderRadius: '10px', fontSize: '13px', color: 'var(--primary-dark)' }}>
-                  Verification code simulated: <strong>123456</strong>
-                </div>
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)', display: 'block', marginBottom: '8px' }}>Verification OTP Code</label>
-                  <input 
-                    type="text" 
-                    placeholder="Enter 6-digit code" 
-                    value={otpCode} 
-                    onChange={e => setOtpCode(e.target.value)} 
-                  />
-                </div>
+            <button className="btn-primary" onClick={() => onCustomerLogin(loginCustId, loginCustPassword)} disabled={isLoading}>
+              <Lock size={18} /> Customer Sign In
+            </button>
 
-                <button className="btn-primary" onClick={onVerifyOtp} disabled={isLoading}>
-                  <CheckCircle size={18} /> Verify & Log In
-                </button>
-              </div>
-            )}
+            <div style={{ textAlign: 'center', marginTop: '10px' }}>
+              <span 
+                onClick={onGoToRegister} 
+                style={{ color: 'var(--primary)', fontWeight: '700', fontSize: '13px', cursor: 'pointer' }}
+              >
+                Don't have a Customer ID? Sign Up / Register
+              </span>
+            </div>
           </div>
         ) : (
           // Operator login credentials form
@@ -1426,7 +1491,7 @@ function LoginView({
   );
 }
 
-function ProfileSetupView({ regName, setRegName, regEmail, setRegEmail, onRegister, isLoading }) {
+function ProfileSetupView({ regName, setRegName, regEmail, setRegEmail, regPhone, setRegPhone, onRegister, onGoToLogin, isLoading }) {
   return (
     <div className="card animate-fade-in" style={{ marginTop: 'auto', marginBottom: 'auto' }}>
       <h2 style={{ color: 'var(--primary)', fontWeight: '800', fontSize: '22px', marginBottom: '8px' }}>Create Profile</h2>
@@ -1444,6 +1509,16 @@ function ProfileSetupView({ regName, setRegName, regEmail, setRegEmail, onRegist
         </div>
 
         <div>
+          <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Mobile Number</label>
+          <input 
+            type="tel" 
+            placeholder="e.g. 9876543210" 
+            value={regPhone} 
+            onChange={e => setRegPhone(e.target.value)} 
+          />
+        </div>
+
+        <div>
           <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Email Address (Optional)</label>
           <input 
             type="email" 
@@ -1456,6 +1531,15 @@ function ProfileSetupView({ regName, setRegName, regEmail, setRegEmail, onRegist
         <button className="btn-primary" onClick={onRegister} disabled={isLoading}>
           <User size={18} /> Register Profile
         </button>
+
+        <div style={{ textAlign: 'center', marginTop: '10px' }}>
+          <span 
+            onClick={onGoToLogin} 
+            style={{ color: 'var(--primary)', fontWeight: '700', fontSize: '13px', cursor: 'pointer' }}
+          >
+            Already have a Customer ID? Sign In
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -1569,7 +1653,7 @@ function CustomerHomeView({
                   display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px'
                 }}>
                   <span style={{ fontSize: '32px' }}>🍃</span>
-                  <div style={{ fontWeight: '600' }}>No ongoing desludging requests</div>
+                  <div style={{ fontWeight: '600' }}>No ongoing septic tank waste treatment requests</div>
                   <p style={{ fontSize: '12px', color: 'var(--text-light)', maxWidth: '280px' }}>
                     Need an audit? Click the Book Service button to schedule a site inspection visit.
                   </p>
@@ -1607,7 +1691,7 @@ function CustomerHomeView({
                             fontSize: '12px', borderRadius: '10px', fontWeight: '700', border: '1px solid rgba(249, 115, 22, 0.1)',
                             display: 'flex', alignItems: 'center', gap: '6px'
                           }}>
-                            ⚠️ Cost Quotation Ready! Review invoice breakup to confirm treatment.
+                             ⚠️ Cost Quotation Ready! Review invoice breakup to confirm treatment.
                           </div>
                         )}
                         <button className="btn-secondary" onClick={() => onTrackBooking(b._id)} style={{ padding: '10px 14px', fontSize: '13px', alignSelf: 'flex-start', marginTop: '4px' }}>
@@ -1816,7 +1900,7 @@ function AddPropertyView({
           </button>
           {propMapsUrl && (
             <span style={{ fontSize: '11px', color: 'var(--primary)', fontWeight: 'bold' }}>
-              ✓ GPS coordinates and Map URL locked!
+              ✅ GPS coordinates and Map URL locked!
             </span>
           )}
         </div>
@@ -2079,7 +2163,7 @@ function BookingStatusView({
 
                 {booking.actualVolumeLiters !== null && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                    <span>Estimated Sludge Volume:</span>
+                    <span>Estimated Fecal Sludge Volume:</span>
                     <strong style={{ color: 'var(--danger)' }}>{booking.actualVolumeLiters.toLocaleString()} Liters</strong>
                   </div>
                 )}
@@ -2265,7 +2349,7 @@ function BookingStatusView({
               </div>
 
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.5', maxWidth: '320px' }}>
-                This record verifies that organic sludge recovery, thermal pasteurization, and zero-waste recycling operations have been finalized.
+                This record verifies that organic fecal sludge recovery, thermal pasteurization, and zero-waste recycling operations have been finalized.
               </p>
 
               {/* Outcomes list */}
@@ -2757,7 +2841,7 @@ function OperatorDashboardView({
                             />
                           </div>
                           <div>
-                            <label style={{ fontSize: '10px', fontWeight: 'bold', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Filled Sludge ({unit})</label>
+                            <label style={{ fontSize: '10px', fontWeight: 'bold', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Filled Fecal Sludge ({unit})</label>
                             <input 
                               type="number" 
                               placeholder="0.0"
@@ -2773,7 +2857,7 @@ function OperatorDashboardView({
 
                         <div style={{ fontSize: '12px', color: 'var(--primary)', fontWeight: '800', display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed var(--border)', paddingTop: '10px' }}>
                           <span>Capacity: {cap.toLocaleString()} L</span>
-                          <span>Sludge: {vol.toLocaleString()} L</span>
+                          <span>Fecal Sludge: {vol.toLocaleString()} L</span>
                         </div>
                       </div>
                     );
@@ -2807,7 +2891,7 @@ function OperatorDashboardView({
                     <div style={{ fontWeight: '800', color: 'var(--primary-dark)', marginBottom: '6px', fontSize: '14px' }}>Live Auto-Calculated Totals</div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                       <span>Total Capacity: <strong>{Math.round(totalCap).toLocaleString()} Liters</strong></span>
-                      <span>Total Sludge: <strong>{Math.round(totalVol).toLocaleString()} Liters</strong></span>
+                      <span>Total Fecal Sludge: <strong>{Math.round(totalVol).toLocaleString()} Liters</strong></span>
                     </div>
                   </div>
                 );
